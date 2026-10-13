@@ -65,17 +65,21 @@ var Nav = (function () {
         track.scrollLeft = left + el.offsetWidth + pad - track.clientWidth;
       }
     }
-    var view = document.getElementById('view');
-    if (view.contains(el)) {
+    // Vertical scrolling: nearest `.scroll-y` ancestor. `data-pad-top` keeps content clear of overlays.
+    var box = el.closest('.scroll-y');
+    if (box) {
       var block = el.closest('.row') || el;
-      var vr = view.getBoundingClientRect();
+      var padTop = Number(box.getAttribute('data-pad-top') || 40);
+      var vr = box.getBoundingClientRect();
       var br = block.getBoundingClientRect();
-      var headerClearance = 140; // keep focused content below the top bar
-      if (br.top < vr.top + headerClearance) view.scrollTop -= (vr.top + headerClearance - br.top);
-      else if (br.bottom > vr.bottom - 40) view.scrollTop += (br.bottom - vr.bottom + 40);
-      if (!el.closest('.row') && el === view.querySelector('.focusable')) view.scrollTop = 0;
+      if (box.getAttribute('data-snap') === 'row' && block !== el) box.scrollTop += br.top - vr.top;
+      else if (br.top < vr.top + padTop) box.scrollTop -= (vr.top + padTop - br.top);
+      else if (br.bottom > vr.bottom - 40) box.scrollTop += (br.bottom - vr.bottom + 40);
+      if (el === box.querySelector('.focusable')) box.scrollTop = 0;
     }
   }
+
+  var listeners = [];
 
   function focus(el) {
     if (!el) return;
@@ -84,6 +88,7 @@ var Nav = (function () {
     el.classList.add('focused');
     el.focus({ preventScroll: true });
     scrollIntoView(el);
+    listeners.forEach(function (fn) { fn(el); });
   }
 
   function move(dir) {
@@ -141,6 +146,7 @@ var Nav = (function () {
     },
     current: function () { return current; },
     setTrap: function (fn) { trap = fn; },
+    onFocus: function (fn) { listeners.push(fn); },
     onBack: function (fn) { backHandler = fn; }
   };
 })();

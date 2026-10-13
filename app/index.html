@@ -7,13 +7,23 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+  <!-- Ambient backdrop: two layers crossfade to the focused title's art. -->
+  <div id="ambient" aria-hidden="true">
+    <div class="amb-layer"></div>
+    <div class="amb-layer"></div>
+    <div class="amb-shade"></div>
+  </div>
+
   <header id="topbar">
-    <div class="brand">Tize<span>eun</span></div>
+    <div class="brand">tizeeun</div>
     <nav id="tabs">
       <button class="tab focusable" data-route="home">Home</button>
+      <button class="tab focusable" data-route="browse">Browse</button>
       <button class="tab focusable" data-route="search">Search</button>
-      <button class="tab focusable" data-route="settings">Settings</button>
     </nav>
+    <button class="tab tab-icon focusable" data-route="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.3 7.3 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+    </button>
   </header>
 
   <main id="view"></main>
@@ -25,16 +35,19 @@
       <div id="player-note"></div>
       <div class="progress"><div id="player-bar"></div></div>
       <div id="player-time"></div>
-      <div class="hint">OK: play/pause · ◀ ▶: seek 10s · Back: close</div>
+      <div class="hint">OK play/pause · ◀ ▶ 10s · Back close</div>
     </div>
   </div>
 
   <div id="toast" class="hidden"></div>
 
+  <script src="js/config.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/tmdb.js"></script>
+  <script src="js/vendor/hls.min.js"></script>
   <script src="js/providers/placeholder.js"></script>
   <script src="js/providers/jellyfin.js"></script>
+  <script src="js/providers/framextv.js"></script>
   <script src="js/providers/index.js"></script>
   <script src="js/nav.js"></script>
   <script src="js/player.js"></script>

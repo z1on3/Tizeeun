@@ -1,7 +1,7 @@
 {
   "name": "tizeeun",
-  "version": "0.1.0",
-  "description": "TV-first movie & series browser for TizenBrew. Catalog from TMDB, playback from your own media servers.",
+  "version": "0.2.0",
+  "description": "TV-first streaming aggregator for TizenBrew. Catalog from TMDB, playback from your media servers plus frameXTV online streams.",
   "packageType": "app",
   "appName": "Tizeeun",
   "appPath": "app/index.html",
@@ -22,7 +22,9 @@
     "app/"
   ],
   "scripts": {
-    "dev": "npx --yes http-server app -p 8080 -c-1"
+    "predev": "node dev/build-config.js",
+    "dev": "npx --yes http-server app -p 8080 -c-1",
+    "config": "node dev/build-config.js"
   },
   "keywords": [
     "tizenbrew",
@@ -30,7 +32,8 @@
     "samsung",
     "tv",
     "jellyfin",
-    "tmdb"
+    "tmdb",
+    "framextv"
   ],
   "license": "MIT"
 }

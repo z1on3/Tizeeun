@@ -2,6 +2,7 @@
 var App = (function () {
   var view = document.getElementById('view');
   var toastEl = document.getElementById('toast');
+  var TOP_LEVEL = ['home', 'browse', 'search', 'settings'];
   var stack = []; // [{ name, params, focusIndex }]
   var toastTimer = null;
   var lastBackAt = 0;
@@ -31,7 +32,7 @@ var App = (function () {
     if (replace && top) stack.pop();
     else if (top) top.focusIndex = focusIndex();
     // Tabs are top-level: switching tabs resets history to that tab.
-    if (name === 'home' || name === 'search' || name === 'settings') {
+    if (TOP_LEVEL.indexOf(name) !== -1) {
       if (!replace) stack = [];
     }
     var entry = { name: name, params: params || {} };
@@ -76,6 +77,12 @@ var App = (function () {
     });
   }
 
+  // Play one specific aggregated source (Details → pick a server).
+  // focusEl is the source row, so returning from the player restores focus there.
+  function playSource(source, focusEl) {
+    Player.open(source, function () { if (focusEl) Nav.focus(focusEl); });
+  }
+
   function registerRemoteKeys() {
     try {
       var keys = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop',
@@ -92,7 +99,7 @@ var App = (function () {
   Nav.onBack(back);
   registerRemoteKeys();
 
-  return { go: go, back: back, toast: toast, play: play };
+  return { go: go, back: back, toast: toast, play: play, playSource: playSource };
 })();
 
 App.go('home');

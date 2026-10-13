@@ -1,7 +1,11 @@
-// TMDB client. Accepts either a v3 API key (32 hex chars) or a v4 read access token.
+// TMDB client using the key built into config.js.
+// Accepts either a v3 API key (32 hex chars) or a v4 read access token.
 var TMDB = (function () {
-  var BASE = 'https://api.themoviedb.org/3';
+  var BASE = Config.tmdbBase;
   var IMG = 'https://image.tmdb.org/t/p/';
+  // A custom base is a proxy that adds the key itself, so no key is needed here.
+  var PROXIED = BASE !== 'https://api.themoviedb.org/3';
+  var CONFIGURED = !!Config.tmdbKey || PROXIED;
   var cache = {};
 
   function isV4Token(key) {
@@ -9,13 +13,13 @@ var TMDB = (function () {
   }
 
   function get(path, params) {
-    var key = Store.get().tmdbKey;
-    if (!key) return Promise.reject(new Error('TMDB key missing'));
+    var key = Config.tmdbKey;
+    if (!CONFIGURED) return Promise.reject(new Error('catalog not configured'));
 
     var query = Object.assign({ language: 'en-US' }, params || {});
     var headers = { Accept: 'application/json' };
-    if (isV4Token(key)) headers.Authorization = 'Bearer ' + key;
-    else query.api_key = key;
+    if (key && isV4Token(key)) headers.Authorization = 'Bearer ' + key;
+    else if (key) query.api_key = key;
 
     var qs = Object.keys(query).map(function (k) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(query[k]);
@@ -66,6 +70,24 @@ var TMDB = (function () {
         { title: 'Now playing', load: function () { return list('/movie/now_playing', 'movie'); } }
       ];
     },
+    genres: function (type) {
+      return get('/genre/' + type + '/list').then(function (json) { return json.genres || []; });
+    },
+    // Filtered catalog for Browse. sort: 'popular' | 'top' | 'newest'.
+    discover: function (type, opts) {
+      var dateField = type === 'tv' ? 'first_air_date' : 'primary_release_date';
+      var params = { include_adult: 'false', sort_by: 'popularity.desc' };
+      if (opts.genreId) params.with_genres = opts.genreId;
+      if (opts.sort === 'top') {
+        params.sort_by = 'vote_average.desc';
+        params['vote_count.gte'] = 300;
+      } else if (opts.sort === 'newest') {
+        params.sort_by = dateField + '.desc';
+        params[dateField + '.lte'] = new Date().toISOString().slice(0, 10);
+        params['vote_count.gte'] = 20;
+      }
+      return list('/discover/' + type, type, params);
+    },
     search: function (q) {
       return list('/search/multi', null, { query: q, include_adult: 'false' });
     },
@@ -80,6 +102,6 @@ var TMDB = (function () {
         return item;
       });
     },
-    hasKey: function () { return !!Store.get().tmdbKey; }
+    hasKey: function () { return CONFIGURED; }
   };
 })();

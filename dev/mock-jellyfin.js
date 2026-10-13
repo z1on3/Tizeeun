@@ -8,12 +8,12 @@ const USER = { Id: 'u1', Name: 'demo' };
 const DEMO_VIDEO = 'https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
 
 const items = [
-  { Id: 'm1', Name: 'Big Buck Bunny', Type: 'Movie', ProductionYear: 2008, ProviderIds: { Tmdb: '10378' },
+  { Id: 'm1', Name: 'Big Buck Bunny', Type: 'Movie', ProductionYear: 2008, ProviderIds: { Tmdb: '10378' }, Genres: ['Animation', 'Comedy'],
     Overview: 'A giant rabbit takes revenge on three bullying rodents.', CommunityRating: 6.4,
     UserData: { PlaybackPositionTicks: 300000000 } },
-  { Id: 'm2', Name: 'Sintel', Type: 'Movie', ProductionYear: 2010, ProviderIds: { Tmdb: '45745' },
+  { Id: 'm2', Name: 'Sintel', Type: 'Movie', ProductionYear: 2010, ProviderIds: { Tmdb: '45745' }, Genres: ['Animation', 'Fantasy'],
     Overview: 'A lonely young woman searches for her baby dragon.', CommunityRating: 7.1, UserData: {} },
-  { Id: 's1', Name: 'Demo Series', Type: 'Series', ProductionYear: 2020, ProviderIds: { Tmdb: '999' },
+  { Id: 's1', Name: 'Demo Series', Type: 'Series', ProductionYear: 2020, ProviderIds: { Tmdb: '999' }, Genres: ['Drama'],
     Overview: 'A series used to test episode resolution.', UserData: {} }
 ];
 const episode = { Id: 'e1', Name: 'Pilot', Type: 'Episode', SeriesId: 's1', SeriesName: 'Demo Series',
@@ -67,7 +67,14 @@ http.createServer((req, res) => {
   if (p === '/Users/u1/Items') {
     const term = (url.searchParams.get('searchTerm') || '').toLowerCase();
     const types = (url.searchParams.get('IncludeItemTypes') || '').split(',');
-    return send(res, 200, { Items: items.filter((i) => i.Name.toLowerCase().includes(term) && types.includes(i.Type)) });
+    const genre = url.searchParams.get('Genres');
+    const sortKey = (url.searchParams.get('SortBy') || '').split(',')[0];
+    const found = items
+      .filter((i) => i.Name.toLowerCase().includes(term) && types.includes(i.Type))
+      .filter((i) => !genre || (i.Genres || []).includes(genre))
+      .sort((a, b) => sortKey === 'CommunityRating' ? (b.CommunityRating || 0) - (a.CommunityRating || 0)
+        : sortKey === 'PremiereDate' ? b.ProductionYear - a.ProductionYear : 0);
+    return send(res, 200, { Items: found });
   }
   const one = p.match(/^\/Users\/u1\/Items\/(\w+)$/);
   if (one) return byId[one[1]] ? send(res, 200, byId[one[1]]) : send(res, 404);

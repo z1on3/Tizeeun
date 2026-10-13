@@ -57,7 +57,8 @@ var JellyfinProvider = (function () {
       rating: it.CommunityRating ? it.CommunityRating.toFixed(1) : '',
       poster: image(server, artId, 'Primary', 'maxHeight=480'),
       backdrop: image(server, artId, 'Backdrop', 'maxWidth=1280'),
-      local: { serverId: server.id, itemId: it.Id, kind: it.Type }
+      local: { serverId: server.id, itemId: it.Id, kind: it.Type },
+      sourceLabel: server.name
     };
   }
 
@@ -143,6 +144,19 @@ var JellyfinProvider = (function () {
           }
         }
       ];
+    },
+
+    // Filtered library for Browse → "My library". genre is a name (Jellyfin genres come from TMDB).
+    browse: function (server, opts) {
+      var sortBy = { popular: 'PlayCount,SortName', top: 'CommunityRating,SortName', newest: 'PremiereDate,SortName' };
+      var path = '/Users/' + server.userId + '/Items?Recursive=true&Limit=60' +
+        '&IncludeItemTypes=' + (opts.type === 'tv' ? 'Series' : 'Movie') +
+        '&SortBy=' + (sortBy[opts.sort] || sortBy.popular) + '&SortOrder=Descending' +
+        '&Fields=ProviderIds,Overview,ProductionYear&EnableUserData=true' +
+        (opts.genre ? '&Genres=' + encodeURIComponent(opts.genre) : '');
+      return request(server, 'GET', path).then(function (res) {
+        return (res.Items || []).map(function (it) { return toItem(server, it); });
+      });
     },
 
     // Item came from this server's library: play it directly.

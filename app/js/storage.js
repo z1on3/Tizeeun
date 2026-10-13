@@ -1,4 +1,4 @@
-// Persistent settings in localStorage: TMDB credentials and the user's media servers.
+// Persistent settings in localStorage: the user's media servers.
 var Store = (function () {
   var KEY = 'tizeeun.settings.v1';
 
@@ -7,12 +7,11 @@ var Store = (function () {
       var raw = localStorage.getItem(KEY);
       var data = raw ? JSON.parse(raw) : {};
       return {
-        tmdbKey: data.tmdbKey || '',
         servers: Array.isArray(data.servers) ? data.servers : [],
         deviceId: data.deviceId || newId()
       };
     } catch (e) {
-      return { tmdbKey: '', servers: [], deviceId: newId() };
+      return { servers: [], deviceId: newId() };
     }
   }
 
@@ -29,10 +28,6 @@ var Store = (function () {
 
   return {
     get: function () { return state; },
-    setTmdbKey: function (key) {
-      state.tmdbKey = (key || '').trim();
-      save();
-    },
     addServer: function (server) {
       server.id = newId();
       state.servers.push(server);
