@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>Tizeeun</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">Tize<span>eun</span></div>
+    <nav id="tabs">
+      <button class="tab focusable" data-route="home">Home</button>
+      <button class="tab focusable" data-route="search">Search</button>
+      <button class="tab focusable" data-route="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main id="view"></main>
+
+  <div id="player" class="hidden">
+    <video id="video" playsinline></video>
+    <div id="player-osd">
+      <div id="player-title"></div>
+      <div id="player-note"></div>
+      <div class="progress"><div id="player-bar"></div></div>
+      <div id="player-time"></div>
+      <div class="hint">OK: play/pause · ◀ ▶: seek 10s · Back: close</div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/tmdb.js"></script>
+  <script src="js/providers/placeholder.js"></script>
+  <script src="js/providers/jellyfin.js"></script>
+  <script src="js/providers/index.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

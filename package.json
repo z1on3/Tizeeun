@@ -1,0 +1,36 @@
+{
+  "name": "tizeeun",
+  "version": "0.1.0",
+  "description": "TV-first movie & series browser for TizenBrew. Catalog from TMDB, playback from your own media servers.",
+  "packageType": "app",
+  "appName": "Tizeeun",
+  "appPath": "app/index.html",
+  "keys": [
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause",
+    "MediaStop",
+    "MediaFastForward",
+    "MediaRewind",
+    "ColorF0Red",
+    "ColorF1Green",
+    "ColorF2Yellow",
+    "ColorF3Blue"
+  ],
+  "evaluateScriptOnDocumentStart": false,
+  "files": [
+    "app/"
+  ],
+  "scripts": {
+    "dev": "npx --yes http-server app -p 8080 -c-1"
+  },
+  "keywords": [
+    "tizenbrew",
+    "tizen",
+    "samsung",
+    "tv",
+    "jellyfin",
+    "tmdb"
+  ],
+  "license": "MIT"
+}

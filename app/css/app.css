@@ -1,0 +1,149 @@
+/* 1920x1080 TV layout. Avoids flex `gap`, `inset` and CSS grid for older Tizen Chromium. */
+:root {
+  --bg: #0b0d12;
+  --panel: #151922;
+  --text: #f2f3f5;
+  --muted: #9aa3b2;
+  --accent: #e8b03a;
+  --focus: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SamsungOne", "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 26px;
+}
+
+button, input { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+button:focus, input:focus { outline: none; } /* .focused draws the highlight */
+.hero-slot:empty { height: 130px; } /* clear the top bar when there's no hero */
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.pad { padding: 0 80px; }
+
+/* ---------- Top bar ---------- */
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 110px;
+  display: flex; align-items: center; padding: 0 80px; z-index: 5;
+  background: linear-gradient(to bottom, var(--bg) 0%, rgba(11, 13, 18, .85) 65%, rgba(11, 13, 18, 0) 100%);
+}
+.brand { font-size: 40px; font-weight: 800; letter-spacing: 1px; margin-right: 60px; }
+.brand span { color: var(--accent); }
+.tab {
+  padding: 10px 26px; margin-right: 12px; border-radius: 40px;
+  color: var(--muted); font-weight: 600; border: 3px solid transparent;
+}
+.tab.active { color: var(--text); }
+.tab.focused { background: var(--text); color: var(--bg); }
+
+/* ---------- Main view ---------- */
+#view {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  overflow: hidden; padding-bottom: 80px;
+}
+
+/* ---------- Hero / details backdrop ---------- */
+.hero, .details {
+  position: relative; height: 760px; background-size: cover; background-position: center top;
+  display: flex; align-items: flex-end;
+}
+.details { height: 1080px; align-items: center; }
+.hero-shade {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    linear-gradient(to right, rgba(11, 13, 18, .95) 0%, rgba(11, 13, 18, .6) 45%, rgba(11, 13, 18, 0) 75%),
+    linear-gradient(to top, var(--bg) 0%, rgba(11, 13, 18, 0) 40%);
+}
+.hero-body, .details-body { position: relative; padding: 0 80px 60px; width: 1000px; }
+.details-body { padding-top: 120px; }
+h1 { font-size: 64px; margin: 0 0 16px; line-height: 1.1; }
+.meta { color: var(--accent); font-weight: 600; margin-bottom: 16px; }
+.genres { color: var(--muted); margin-bottom: 16px; }
+.overview {
+  color: #d7dbe2; line-height: 1.45; margin: 0 0 30px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.overview.long { -webkit-line-clamp: 7; }
+
+/* ---------- Buttons ---------- */
+.actions { display: flex; flex-wrap: wrap; align-items: center; }
+.actions > * { margin: 0 20px 16px 0; }
+.btn {
+  padding: 16px 40px; border-radius: 10px; font-weight: 700;
+  background: rgba(255, 255, 255, .14); border: 3px solid transparent;
+}
+.btn.primary { background: var(--accent); color: #111; }
+.btn.small { padding: 10px 26px; font-size: 22px; }
+.btn[disabled] { opacity: .4; }
+.btn.focused { border-color: var(--focus); transform: scale(1.06); box-shadow: 0 0 0 6px rgba(255, 255, 255, .15); }
+
+/* ---------- Rows & cards ---------- */
+.row { padding: 10px 0 0; }
+.row h2 { font-size: 32px; margin: 0 0 6px 80px; }
+.row-track { display: flex; overflow: hidden; padding: 20px 80px 30px; }
+.row-loading, .row-error { color: var(--muted); height: 100px; }
+.card { flex: 0 0 auto; width: 240px; margin-right: 28px; transition: transform .12s ease-out; }
+.poster {
+  position: relative; width: 240px; height: 360px; border-radius: 12px; overflow: hidden;
+  background: var(--panel); border: 4px solid transparent;
+}
+.poster img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.poster-fallback { position: absolute; left: 16px; right: 16px; bottom: 16px; font-weight: 700; }
+.card-title { margin-top: 12px; font-size: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-meta { font-size: 20px; color: var(--muted); }
+.card.focused { transform: scale(1.08); }
+.card.focused .poster { border-color: var(--focus); box-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
+
+/* ---------- Pages (search/settings) ---------- */
+.page { padding: 140px 80px 40px; }
+.grid { display: flex; flex-wrap: wrap; margin-top: 30px; }
+.grid .card { margin-bottom: 30px; }
+.empty { padding: 300px 80px 0; width: 1200px; }
+.empty p { color: var(--muted); font-size: 30px; line-height: 1.4; margin-bottom: 40px; }
+
+input.text {
+  display: block; width: 900px; padding: 18px 24px; margin-bottom: 20px;
+  background: var(--panel); border: 3px solid #2a3040; border-radius: 10px; outline: none;
+}
+input.text.focused { border-color: var(--focus); }
+.field span { display: block; color: var(--muted); font-size: 22px; margin-bottom: 8px; }
+
+.panel { background: var(--panel); border-radius: 16px; padding: 30px 40px; margin-bottom: 30px; width: 1300px; }
+.panel h2 { margin: 0 0 8px; }
+.panel.inner { background: rgba(255, 255, 255, .04); margin-top: 20px; width: auto; }
+.panel input.text { background: var(--bg); }
+.server {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 0; border-bottom: 1px solid #262c3a;
+}
+.server-list { margin-bottom: 20px; }
+
+/* ---------- Player ---------- */
+#player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 20; }
+#video { width: 100%; height: 100%; background: #000; }
+#player-osd {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 80px 50px;
+  background: linear-gradient(to top, rgba(0, 0, 0, .9), rgba(0, 0, 0, 0));
+  transition: opacity .4s;
+}
+#player-osd.faded { opacity: 0; }
+#player-title { font-size: 44px; font-weight: 800; }
+#player-note { color: var(--accent); margin: 8px 0 24px; }
+.progress { height: 8px; background: rgba(255, 255, 255, .25); border-radius: 4px; overflow: hidden; }
+#player-bar { height: 100%; width: 0; background: var(--accent); }
+#player-time { margin-top: 12px; color: #ccc; }
+#player-osd .hint { margin-top: 10px; color: #888; font-size: 20px; }
+
+/* ---------- Toast ---------- */
+#toast {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 30;
+  background: rgba(20, 24, 33, .96); border: 2px solid #333b4d; padding: 18px 36px; border-radius: 40px;
+}
