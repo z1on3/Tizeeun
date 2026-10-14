@@ -150,6 +150,9 @@ button:focus, input:focus { outline: none; } /* .focused draws the highlight */
 
 /* Details: title + info on the left, aggregated sources on the right. */
 .details-body { position: absolute; left: var(--pad-x); bottom: 130px; width: 960px; }
+/* Series: the episode picker makes the left column tall, so pin it to the top
+   and let it scroll (nav.js manages it via the .scroll-y class). */
+.details-body.series { top: 170px; bottom: 90px; overflow-y: auto; padding-right: 20px; }
 .details-body .display { font-size: 96px; line-height: 1; margin: 0 0 22px; }
 .genres { color: var(--fog); margin: 14px 0 0; }
 .overview {
@@ -192,6 +195,42 @@ button:focus, input:focus { outline: none; } /* .focused draws the highlight */
 .source-row.focused { border-color: var(--lamp); box-shadow: var(--glow); transform: scale(1.02); }
 .source-row.focused .source-name { color: var(--mist); }
 .source-row.focused .source-play { color: var(--lamp); }
+
+/* Episode picker (Details, series) */
+.ep-picker { margin: 24px 0 12px; }
+.ep-section-label {
+  font-family: "Slate", monospace; font-size: 15px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--fog); margin: 0 0 10px;
+}
+.ep-seasons {
+  display: flex; overflow-x: auto; padding: 6px 0 10px;
+  scrollbar-width: none;
+}
+.ep-seasons .seg-btn {
+  font-family: "Slate", monospace; font-size: 20px; letter-spacing: .04em;
+  padding: 10px 22px; margin-right: 12px; white-space: nowrap;
+  border: 2px solid var(--rule); border-radius: 12px; background: transparent; color: var(--mist);
+}
+.ep-seasons .seg-btn.on { background: var(--lamp); color: var(--night); border-color: var(--lamp); }
+.ep-seasons .seg-btn.focused { box-shadow: var(--glow); border-color: var(--lamp); }
+.ep-list { max-height: 560px; overflow-y: auto; margin: 0 -20px 0 0; padding-right: 16px; }
+.ep-row {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  padding: 14px 18px; margin-bottom: 8px;
+  border: 2px solid var(--rule); border-radius: 12px; background: var(--slate);
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.ep-num {
+  font-family: "Slate", monospace; font-size: 17px; color: var(--lamp);
+  margin-right: 18px; white-space: nowrap; min-width: 78px;
+}
+.ep-title {
+  font-weight: 600; font-size: 22px; color: var(--mist); flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 16px;
+}
+.ep-date { font-family: "Slate", monospace; font-size: 15px; color: var(--fog); white-space: nowrap; }
+.ep-row.on { border-color: var(--lamp); background: rgba(246, 217, 168, .08); }
+.ep-row.focused { border-color: var(--lamp); box-shadow: var(--glow); transform: scale(1.01); }
 
 /* Pages (browse, search, settings) */
 .page { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 150px var(--pad-x) 80px; }
@@ -262,7 +301,15 @@ input.text.focused { border-color: var(--lamp); }
 .progress { height: 6px; background: rgba(232, 238, 236, .2); border-radius: 3px; overflow: hidden; }
 #player-bar { height: 100%; width: 0; background: var(--lamp); }
 #player-time { font-family: "Slate", monospace; margin-top: 14px; color: var(--mist); font-size: 22px; }
-#player-osd .hint { margin-top: 8px; color: var(--fog); font-size: 20px; }
+.player-chips { display: flex; margin-top: 14px; }
+.player-chips .chip {
+  font-family: "Slate", monospace; font-size: 16px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--mist); background: rgba(232, 238, 236, .1); border: 1px solid var(--rule);
+  padding: 6px 14px; border-radius: 999px;
+}
+.player-chips .chip + .chip { margin-left: 12px; }
+.player-chips .chip:empty { display: none; }
+#player-osd .hint { margin-top: 12px; color: var(--fog); font-size: 20px; }
 
 /* ---------- Toast ---------- */
 #toast {

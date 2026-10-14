@@ -102,6 +102,24 @@ var TMDB = (function () {
         return item;
       });
     },
+    seasons: function (id) {
+      return get('/tv/' + id).then(function (json) {
+        return (json.seasons || []).filter(function (s) { return s.season_number >= 0 && s.episode_count > 0; });
+      });
+    },
+    season: function (id, seasonNumber) {
+      return get('/tv/' + id + '/season/' + seasonNumber).then(function (json) {
+        return (json.episodes || []).map(function (ep) {
+          return {
+            season: seasonNumber,
+            episode: ep.episode_number,
+            title: ep.name || 'Episode ' + ep.episode_number,
+            overview: ep.overview || '',
+            airDate: ep.air_date || ''
+          };
+        });
+      });
+    },
     hasKey: function () { return CONFIGURED; }
   };
 })();

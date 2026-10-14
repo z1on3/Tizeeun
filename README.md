@@ -93,8 +93,9 @@ The Details page renders each group under a section label; pressing a row plays 
 
 ## Known limitations / next steps
 
-- **frameXTV is a third-party dependency.** `api.framextv.tech` is closed-source and may change or go down; a title then simply drops out of the "Online" group (the app degrades gracefully). Remove `framextv` from the `Providers` registry in `providers/index.js` to switch it off entirely.
+- **frameXTV is a third-party dependency.** `api.framextv.tech` is closed-source and its per-provider endpoints are intermittent, so it may change or go down. Each per-provider request is time-boxed (12 s), and if they all come back empty an auto call (frameXTV picks a server) is used as a safety net — a title then only drops out of the "Online" group if even that fails. Remove `framextv` from the `Providers` registry in `providers/index.js` to switch it off entirely.
 - **HTTP servers vs. HTTPS origin:** if TizenBrew serves the module over HTTPS, a LAN Jellyfin at `http://…` may be blocked as mixed content. If that happens on the TV, add a `serviceFile` proxy or use HTTPS on the server.
 - **Codecs:** frameXTV streams are HLS and play via hls.js. Your own Jellyfin copies still use `<video>` with the direct file, so files the TV can't decode will fail. Next step: Samsung `webapis.avplay` and/or Jellyfin HLS transcoding (`master.m3u8`).
 - Watch progress isn't reported back to Jellyfin yet (resume position is read, not written).
-- No episode picker for series yet; "Play" starts next-up or the first episode.
+- Episode picker for series is in (Details page: season chips + episode list; picking re-fetches that episode's sources). "Play" still defaults to S1E1 when no episode is chosen.
+- Subtitles (DOWN) and audio tracks (UP) are switched in the player from frameXTV's data; availability is best-effort — some titles have many, others none, and they load a moment after playback starts.

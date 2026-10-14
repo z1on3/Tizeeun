@@ -34,6 +34,8 @@ var Providers = (function () {
       startSeconds: 0,
       type: first.type || 'hls',
       quality: first.quality || '',
+      tmdbId: item.tmdbId,
+      item: item,
       fallback: entry.mirrors.slice(1).map(function (m) { return m.url; })
     };
   }
@@ -75,7 +77,17 @@ var Providers = (function () {
             ? { kind: 'online', providerId: p.id, providerName: p.name, tagline: p.tagline, mirrors: mirrors }
             : null;
         });
-      }));
+      })).then(function (list) {
+        var found = list.filter(Boolean);
+        if (found.length) return found;
+        // Safety net: the per-provider endpoints are flaky, so if they all came
+        // back empty, the auto endpoint (frameXTV picks a server) usually still
+        // finds the title.
+        return FrameXtvProvider.autoSource(item).then(function (mirrors) {
+          if (!mirrors.length) return [];
+          return [{ kind: 'online', providerId: 'auto', providerName: 'frameXTV', tagline: 'auto-picked server', mirrors: mirrors }];
+        });
+      });
     });
 
     // --- Fallback (placeholder, always) ---

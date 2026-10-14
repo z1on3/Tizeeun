@@ -245,37 +245,124 @@ var Views = (function () {
 
   function details(root, params) {
     var item = params.item;
-    var body = h('div', { class: 'details-body' });
+    var isSeries = item.type === 'tv';
+    var body = h('div', { class: 'details-body' + (isSeries ? ' series scroll-y' : '') });
     sourcesPanel = h('div', { class: 'sources-panel' });
     root.appendChild(h('section', { class: 'details' }, [body, sourcesPanel]));
     Ambient.mode('full');
     Ambient.show(item.backdrop);
 
-    function renderInfo(full) {
+    // Single mutable working item: starts as `item`, enriched with TMDB details
+    // when they resolve, and always carries the currently selected
+    // season/episode for series. The Play button and the source list operate on
+    // it, so picking an episode re-fetches exactly that episode's sources.
+    var data = {};
+    for (var k in item) { if (item.hasOwnProperty(k)) data[k] = item[k]; }
+    if (isSeries) { data.season = item.season || 1; data.episode = item.episode || 1; }
+    var seasonState = null;        // { seasons: [...], eps: [...], epsLoading: bool }
+
+    function renderInfo() {
       body.innerHTML = '';
-      body.appendChild(h('h1', { class: 'display' }, full.title));
-      body.appendChild(h('div', { class: 'slate' }, slate(full)));
-      if (full.genres && full.genres.length) body.appendChild(h('div', { class: 'genres' }, full.genres.join('  /  ')));
-      body.appendChild(h('p', { class: 'overview' }, full.overview || 'No description available.'));
+      body.appendChild(h('h1', { class: 'display' }, data.title));
+      body.appendChild(h('div', { class: 'slate' }, slate(data)));
+      if (data.genres && data.genres.length) body.appendChild(h('div', { class: 'genres' }, data.genres.join('  /  ')));
+      body.appendChild(h('p', { class: 'overview' }, data.overview || 'No description available.'));
+      if (isSeries) body.appendChild(renderPicker());
       body.appendChild(h('div', { class: 'actions' }, [
-        h('button', { class: 'btn primary focusable', onclick: function () { App.play(full); } }, 'Play'),
+        h('button', { class: 'btn primary focusable', onclick: function () { App.play(data); } },
+          isSeries ? 'Play  S' + data.season + 'E' + data.episode : 'Play'),
         h('button', { class: 'btn focusable', onclick: function () { App.back(); } }, 'Back')
       ]));
       Nav.focusFirst(body);
     }
 
-    renderInfo(item);
-    renderSources(item);
+    function renderPicker() {
+      var wrap = h('div', { class: 'ep-picker' });
+      wrap.appendChild(h('div', { class: 'ep-section-label' }, 'Season'));
+      var chips = h('div', { class: 'row-track ep-seasons' });
+      (seasonState && seasonState.seasons || []).forEach(function (s) {
+        var on = s.season_number === data.season;
+        chips.appendChild(h('button', {
+          class: 'seg-btn focusable' + (on ? ' on' : ''),
+          onclick: function () { selectSeason(s.season_number); }
+        }, 'S' + s.season_number));
+      });
+      wrap.appendChild(chips);
+
+      wrap.appendChild(h('div', { class: 'ep-section-label' }, 'Episodes'));
+      var epList = h('div', { class: 'ep-list scroll-y' });
+      if (!seasonState || seasonState.epsLoading) {
+        epList.appendChild(h('div', { class: 'row-note' }, 'Loading episodes…'));
+      } else if (!seasonState.eps || !seasonState.eps.length) {
+        epList.appendChild(h('div', { class: 'row-note' }, 'No episodes found.'));
+      } else {
+        seasonState.eps.forEach(function (ep) {
+          var on = ep.season === data.season && ep.episode === data.episode;
+          epList.appendChild(h('button', {
+            class: 'ep-row focusable' + (on ? ' on' : ''),
+            onclick: function () { selectEpisode(ep.season, ep.episode); }
+          }, [
+            h('span', { class: 'ep-num' }, 'S' + ep.season + 'E' + ep.episode),
+            h('span', { class: 'ep-title' }, ep.title),
+            h('span', { class: 'ep-date' }, ep.airDate || '')
+          ]));
+        });
+      }
+      wrap.appendChild(epList);
+      return wrap;
+    }
+
+    function loadEpisodes(seasonNumber) {
+      seasonState = seasonState || { seasons: [], eps: [], epsLoading: true };
+      seasonState.epsLoading = true;
+      TMDB.season(data.tmdbId, seasonNumber).then(function (eps) {
+        seasonState.eps = eps;
+        seasonState.epsLoading = false;
+        if (document.body.contains(body)) renderInfo();
+      }).catch(function () {
+        seasonState.eps = [];
+        seasonState.epsLoading = false;
+        if (document.body.contains(body)) renderInfo();
+      });
+    }
+
+    function selectSeason(n) {
+      data.season = n;
+      data.episode = 1;
+      loadEpisodes(n);
+      renderSources(data);
+    }
+
+    function selectEpisode(season, episode) {
+      data.season = season;
+      data.episode = episode;
+      renderInfo();
+      renderSources(data);
+    }
+
+    renderInfo();
+    renderSources(data);
 
     if (item.tmdbId && TMDB.hasKey()) {
       TMDB.details(item.type, item.tmdbId).then(function (full) {
-        full.local = item.local; // keep the direct-play link for library items
-        full.sourceLabel = item.sourceLabel;
-        if (item.local) full.title = item.title;
+        // Enrich the working item, preserving local/sourceLabel + season/episode.
+        data = full;
+        data.local = item.local;
+        data.sourceLabel = item.sourceLabel;
+        if (item.local) data.title = item.title;
+        if (isSeries) { data.season = item.season || 1; data.episode = item.episode || 1; }
         if (!document.body.contains(body)) return;
-        renderInfo(full);
-        renderSources(full);
+        renderInfo();
         Ambient.show(full.backdrop || item.backdrop);
+        // Series: load the season list and the first season's episodes.
+        if (isSeries) {
+          TMDB.seasons(item.tmdbId).then(function (seasons) {
+            seasonState = { seasons: seasons, eps: [], epsLoading: true };
+            if (!document.body.contains(body)) return;
+            renderInfo();
+            loadEpisodes(data.season);
+          }).catch(function () {});
+        }
       }).catch(function () {});
     }
   }

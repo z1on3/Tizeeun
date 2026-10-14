@@ -1,7 +1,7 @@
 {
   "name": "tizeeun",
-  "version": "0.2.0",
-  "description": "TV-first streaming aggregator for TizenBrew. Catalog from TMDB, playback from your media servers plus frameXTV online streams.",
+  "version": "0.3.0",
+  "description": "TV-first streaming aggregator for TizenBrew. Catalog from TMDB, playback from your media servers plus frameXTV online streams, with episode picker and subtitles.",
   "packageType": "app",
   "appName": "Tizeeun",
   "appPath": "app/index.html",

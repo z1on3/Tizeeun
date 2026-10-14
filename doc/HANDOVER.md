@@ -24,6 +24,8 @@ Repo: [github.com/z1on3/Tizeeun](https://github.com/z1on3/Tizeeun) (private), br
 | Play from Jellyfin, with resume position | Works | Resumed at 0:30 from the mock server |
 | Series plays its next-up or first episode | Works | Mock Jellyfin |
 | Aggregate and choose a source per title (Details page) | Works | Groups: your servers / frameXTV online / fallback |
+| **Episode picker (Details, series)** | Works | Season chips + episode list; picking re-fetches that episode's sources |
+| **Subtitles in player** | Works | frameXTV `/api/subtitles`; DOWN cycles tracks (42 for Breaking Bad S1E1) |
 | frameXTV online streams (HLS, no login) | **Works** | Live API; Inception → Super Barbarian 4K/1080p, `videoDuration` ≈ 2h28m in headless Chrome |
 | HLS playback via hls.js + mirror failover | **Works** | Headless Chrome loaded a frameXTV `.m3u8` manifest (no native HLS needed) |
 | Placeholder video when a title isn't on any source | Works | Browser |
@@ -75,15 +77,15 @@ The scripts load in order from `app/index.html` as plain globals (no modules, no
 | `app/fonts/` | Bundled OFL fonts: Bricolage Grotesque (titles), Manrope (body), JetBrains Mono (metadata) |
 | `app/js/config.js` | TMDB key and API base URL (generated from `.env`; public once shipped) |
 | `app/js/storage.js` | `Store`: servers and device id in localStorage |
-| `app/js/tmdb.js` | `TMDB`: rows, `discover` (Browse filters), genres, search, details. Accepts a v3 key (query param) or a v4 token (Bearer header). Caches in memory. |
+| `app/js/tmdb.js` | `TMDB`: rows, `discover` (Browse filters), genres, search, details, `seasons`/`season` (episode picker). Accepts a v3 key (query param) or a v4 token (Bearer header). Caches in memory. |
 | `app/js/vendor/hls.min.js` | Vendored [hls.js](https://github.com/video-dev/hls.js) 1.5.x — plays frameXTV's `.m3u8` streams in browsers without native HLS (older Tizen Chromium) |
 | `app/js/providers/placeholder.js` | Fallback source (demo video) |
 | `app/js/providers/jellyfin.js` | Jellyfin login, library rows, TMDB-to-library matching, stream URLs |
-| `app/js/providers/framextv.js` | frameXTV: built-in online aggregator. Lists extraction providers, fetches all HLS mirrors per title (public `api.framextv.tech`, no auth) |
+| `app/js/providers/framextv.js` | frameXTV: built-in online aggregator. `listProviders()` + `findSource()` (per-provider mirrors, timed) + `autoSource()` (safety net) + `subtitles()`. Public `api.framextv.tech`, no auth |
 | `app/js/providers/index.js` | `Providers` registry: `sources(item)` aggregates into **Your servers / Online / Fallback** sections; `resolve(item)` picks the best one; `onlineSource()` shapes a frameXTV entry for the player |
 | `app/js/nav.js` | `Nav`: spatial focus for the remote, row/page scrolling, key trap for the player |
-| `app/js/player.js` | `Player`: fullscreen `<video>`, on-screen controls, seek, close. Plays MP4 natively, HLS via hls.js, and auto-fails-over to `source.fallback` mirrors on a fatal error |
-| `app/js/views.js` | Screens: Home (spotlight), Browse (filters), Details (aggregated source list), Search, Settings; `Ambient` backdrop; `h()` DOM builder |
+| `app/js/player.js` | `Player`: fullscreen `<video>`, on-screen controls, seek, close. Plays MP4 natively, HLS via hls.js, auto-fails-over to `source.fallback` mirrors on a fatal error, and cycles subtitles (DOWN) / audio (UP) from frameXTV |
+| `app/js/views.js` | Screens: Home (spotlight), Browse (filters), Details (aggregated sources + episode picker for series), Search, Settings; `Ambient` backdrop; `h()` DOM builder |
 | `app/js/main.js` | `App`: router with a history stack, Back handling, `play()` flow and `playSource()` for picking one aggregated source |
 | `dev/mock-jellyfin.js` | Fake Jellyfin with only the endpoints the app uses |
 | `dev/build-config.js` | Copies the TMDB key from `.env` into `app/js/config.js` (run by `npm run config` / `predev`) |
@@ -149,22 +151,21 @@ While the player is open, `Nav.setTrap()` sends every key to the player first. B
 2. **http vs https.** If TizenBrew serves the module over HTTPS, the TV may block a local Jellyfin at `http://…` as mixed content. Fixes: a `serviceFile` proxy in the module, or HTTPS on the Jellyfin server.
 3. **Video formats.** frameXTV online streams are HLS and play via hls.js (MSE), so they work without native decode support. Your own Jellyfin copies still use `<video>` with the direct file — files the TV can't decode fail with "Playback failed". Fix those with Samsung's `webapis.avplay` and/or Jellyfin HLS transcoding (`/Videos/{id}/master.m3u8`); the player already accepts an HLS url + fallback mirrors, so a transcoded endpoint drops in cleanly.
 4. **Watch progress isn't saved back to Jellyfin.** The resume position is read but not written (`/Sessions/Playing`, `/Sessions/Playing/Progress`, `/Sessions/Playing/Stopped` are not called).
-5. **No episode picker.** Play on a series starts the next-up or first episode.
+5. **Subtitle/audio availability is best-effort.** Subtitles come from frameXTV's `/api/subtitles` (OpenSubtitles via strem.io) — some titles have dozens, others none, and they're fetched async after the stream starts (so they appear a moment into playback). Audio-track switching only exists where the source exposes more than one track (rare). The player cycles what's present; it never blocks playback on it.
 6. **Focus after Back on Home.** Rows load asynchronously, so going back to Home can land focus on the first item instead of the card you came from.
 7. **The placeholder video URL is external.** The Google sample bucket used at first now returns 403. If the Internet Archive URL dies too, update `providers/placeholder.js` and `dev/mock-jellyfin.js`.
-8. **frameXTV is a third-party dependency.** `api.framextv.tech` is closed-source and could change or go down without notice; it's the only reason "Online" sources exist. The app degrades gracefully (a title simply drops out of the Online group), and it can be switched off by removing `framextv` from the `Providers` registry in `providers/index.js`. Watch its rate limits / uptime.
+8. **frameXTV is a third-party dependency.** `api.framextv.tech` is closed-source and its per-provider endpoints are intermittent, so it could change or go down without notice. The app degrades gracefully: each per-provider request is time-boxed (12 s), and if they all come back empty an `autoSource()` call (frameXTV picks a server) is used as a safety net. It can be switched off entirely by removing `framextv` from the `Providers` registry in `providers/index.js`.
 9. **The TMDB key is public once shipped.** It's baked into `config.js` (from `.env`). If that matters, proxy TMDB (e.g. a Cloudflare Worker), point `TMDB_BASE` at it, and leave the tokens empty.
-10. **No automated UI tests.** `dev/test-sources.js` covers the provider/aggregation layer against the live frameXTV API + mock Jellyfin; the rest (navigation, player) was verified by hand in a browser.
+10. **No automated UI tests.** `dev/test-sources.js` covers the provider/aggregation layer against the live frameXTV API + mock Jellyfin; the rest (navigation, player, episode picker) was verified by hand in a browser.
 
 ## Next steps (in priority order)
 
 1. **Install on a real TV** through TizenBrew, with the TMDB key in `.env` (built into `config.js` via `npm run config`). frameXTV needs no setup; add a Jellyfin server only if you want your own copies. This checks risks 1–3, plus backdrop crossfade performance on TV hardware.
 2. **Switch playback to AVPlay** for your own Jellyfin files (frameXTV is already HLS via hls.js). Also consider Jellyfin HLS transcoding (`/Videos/{id}/master.m3u8`) so server copies ride the same failover path.
 3. **Save watch progress** to Jellyfin (start, progress every ~10s, stopped).
-4. **Episode picker**: season/episode lists on the Details page for series. The item passed to `Details` would then carry `season`/`episode`, which both `findSource` (your servers) and frameXTV (`/api/stream?…&season=&episode=`) already use — today series default to S1E1.
-5. **Add Plex**:
-   1. Create `app/js/providers/plex.js` with the same members as `jellyfin.js`: `type`, `label`, `fields`, `connect(form)`, `libraryRows(server)`, `sourceForLocal(server, item)`, `findSource(server, item)`. `findSource` resolves `null` when the title isn't there.
-   2. Register it in `providers/index.js` (`registry.plex = PlexProvider`) and remove `'Plex'` from `comingSoon`.
-   3. Add its `<script>` tag in `index.html` before `providers/index.js`.
-   4. Plex sign-in usually goes through plex.tv PIN login (`/api/v2/pins`), not username/password, so `fields` and `connect` will differ.
-6. **Trailers**: `TMDB.details()` already returns `trailerKey` (YouTube), but nothing uses it yet.
+4. **Add Plex**:
+    1. Create `app/js/providers/plex.js` with the same members as `jellyfin.js`: `type`, `label`, `fields`, `connect(form)`, `libraryRows(server)`, `sourceForLocal(server, item)`, `findSource(server, item)`. `findSource` resolves `null` when the title isn't there.
+    2. Register it in `providers/index.js` (`registry.plex = PlexProvider`) and remove `'Plex'` from `comingSoon`.
+    3. Add its `<script>` tag in `index.html` before `providers/index.js`.
+    4. Plex sign-in usually goes through plex.tv PIN login (`/api/v2/pins`), not username/password, so `fields` and `connect` will differ.
+5. **Trailers**: `TMDB.details()` already returns `trailerKey` (YouTube), but nothing uses it yet.
