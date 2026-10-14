@@ -99,6 +99,10 @@ var App = (function () {
   Nav.onBack(back);
   registerRemoteKeys();
 
+  // Show the running version subtly next to the logo.
+  var brandVersion = document.getElementById('brand-version');
+  if (brandVersion && Config && Config.version) brandVersion.textContent = 'v' + Config.version;
+
   return { go: go, back: back, toast: toast, play: play, playSource: playSource };
 })();
 

@@ -81,6 +81,11 @@ button:focus, input:focus { outline: none; } /* .focused draws the highlight */
   font-family: "Bricolage", sans-serif; font-weight: 800; font-size: 36px;
   letter-spacing: -0.03em; margin-right: 72px;
 }
+.brand-version {
+  font-family: "Slate", monospace; font-size: 15px; font-weight: 400;
+  letter-spacing: .04em; color: var(--fog); margin-left: 12px; vertical-align: super;
+  opacity: .7;
+}
 #tabs { display: flex; flex: 1; }
 .tab {
   position: relative; padding: 10px 24px; margin-right: 8px; border-radius: 999px;
