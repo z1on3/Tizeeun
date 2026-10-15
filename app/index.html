@@ -33,6 +33,7 @@
 
   <div id="player" class="hidden">
     <video id="video" playsinline></video>
+    <iframe id="player-iframe" title="stream"></iframe>
     <div id="player-osd">
       <div id="player-title"></div>
       <div id="player-note"></div>
@@ -43,6 +44,7 @@
         <span id="player-audio" class="chip"></span>
       </div>
       <div class="hint">OK play/pause · ◀ ▶ 10s · ▲ audio · ▼ subtitles · Back close</div>
+      <button id="player-close" class="player-close focusable">✕ Close</button>
     </div>
   </div>
 
@@ -55,6 +57,8 @@
   <script src="js/providers/placeholder.js"></script>
   <script src="js/providers/jellyfin.js"></script>
   <script src="js/providers/framextv.js"></script>
+  <script src="js/providers/vidsrc.js"></script>
+  <script src="js/providers/2embed.js"></script>
   <script src="js/providers/index.js"></script>
   <script src="js/nav.js"></script>
   <script src="js/player.js"></script>

@@ -29,6 +29,8 @@ function load(rel, name) {
 load('js/providers/placeholder.js', 'placeholder.js');
 load('js/providers/jellyfin.js', 'jellyfin.js');
 load('js/providers/framextv.js', 'framextv.js');
+load('js/providers/vidsrc.js', 'vidsrc.js');
+load('js/providers/2embed.js', '2embed.js');
 load('js/providers/index.js', 'index.js');
 
 let failures = 0;
@@ -43,21 +45,47 @@ function section(res, title) {
 const has = { tmdbId: 10378, type: 'movie', title: 'Big Buck Bunny', year: '2008' };
 const local = { tmdbId: 10378, type: 'movie', title: 'Big Buck Bunny', year: '2008', local: { serverId: 'srv1', itemId: 'm1', kind: 'Movie' }, sourceLabel: 'Mock Jellyfin' };
 const unknown = { tmdbId: 1, type: 'movie', title: 'Nope Film', year: '1999' };
+// Inception: real TMDB + IMDB id, so frameXTV (HLS) AND VidSrc/2Embed (iframe) all appear.
+const inception = { tmdbId: 27205, type: 'movie', title: 'Inception', year: '2010', imdbId: 'tt1375666' };
 
 (async function () {
-  console.log('FrameXtvProvider registered + built-in:');
+  console.log('Built-in providers registered + hidden from "Add server":');
   assert(global.Providers.get('framextv') === global.FrameXtvProvider, 'framextv is in the registry');
-  assert(global.Providers.types().indexOf('framextv') === -1, 'framextv is hidden from "Add server" types');
+  assert(global.Providers.get('vidsrc') === global.VidSrcProvider, 'vidsrc is in the registry');
+  assert(global.Providers.get('2embed') === global.Embed2Provider, '2embed is in the registry');
+  assert(global.Providers.types().indexOf('framextv') === -1 && global.Providers.types().indexOf('vidsrc') === -1 && global.Providers.types().indexOf('2embed') === -1, 'all built-ins hidden from "Add server" types');
   assert(global.Providers.types().indexOf('jellyfin') !== -1, 'jellyfin is still an addable type');
 
-  console.log('Providers.sources(has) — mock has it, frameXTV likely does not:');
+  console.log('Providers.sources(has) — mock has it, no imdbId (no iframe rows):');
   const res = await global.Providers.sources(has);
   const servers = section(res, 'Your servers');
   const online = section(res, 'Online');
   const fallback = section(res, 'Fallback');
   assert(servers && servers.entries.length === 1 && servers.entries[0].kind === 'server', 'one server entry (got ' + (servers && servers.entries.length) + ')');
-  assert(online && online.entries.every(function (e) { return e.kind === 'online' && Array.isArray(e.mirrors) && e.mirrors.length > 0; }), 'online entries are frameXTV mirror groups (got ' + (online && online.entries.length) + ')');
+  assert(online && online.entries.every(function (e) { return e.kind === 'online' && Array.isArray(e.mirrors) && e.mirrors.length > 0; }), 'online entries are mirror groups (got ' + (online && online.entries.length) + ')');
+  assert(online && online.entries.every(function (e) { return e.providerName !== 'VidSrc' && e.providerName !== '2Embed'; }), 'no iframe rows without imdbId');
   assert(fallback && fallback.entries.length === 1 && fallback.entries[0].kind === 'fallback', 'one fallback entry');
+
+  console.log('Providers.sources(inception) — frameXTV HLS + VidSrc + 2Embed iframe:');
+  const resIn = await global.Providers.sources(inception);
+  const onlineIn = section(resIn, 'Online').entries;
+  const vidsrcIn = onlineIn.filter(function (e) { return e.providerName === 'VidSrc'; });
+  const embed2In = onlineIn.filter(function (e) { return e.providerName === '2Embed'; });
+  const hlsIn = onlineIn.filter(function (e) { return e.mirrors[0].type !== 'iframe'; });
+  assert(vidsrcIn.length === 1 && vidsrcIn[0].mirrors[0].type === 'iframe' && /tt1375666/.test(vidsrcIn[0].mirrors[0].url), 'VidSrc iframe row present with IMDB url (got ' + (vidsrcIn[0] && vidsrcIn[0].mirrors[0].url) + ')');
+  assert(embed2In.length === 1 && embed2In[0].mirrors[0].type === 'iframe' && /tt1375666/.test(embed2In[0].mirrors[0].url), '2Embed iframe row present with IMDB url (got ' + (embed2In[0] && embed2In[0].mirrors[0].url) + ')');
+  assert(hlsIn.length >= 1, 'frameXTV HLS row present (got ' + hlsIn.length + ')');
+
+  console.log('Providers.onlineSource(inception) — HLS vs iframe shaping:');
+  const hlsEntry = hlsIn[0];
+  const hlsSrc = global.Providers.onlineSource(inception, hlsEntry);
+  assert(hlsSrc.type === 'hls' && Array.isArray(hlsSrc.fallback) && hlsSrc.fallback.length === hlsEntry.mirrors.length - 1, 'HLS source has hls type + fallback mirrors');
+  const iframeSrc = global.Providers.onlineSource(inception, vidsrcIn[0]);
+  assert(iframeSrc.type === 'iframe' && !iframeSrc.fallback, 'iframe source has iframe type, no fallback list');
+
+  console.log('Providers.resolve(inception) — prefers HLS over iframe:');
+  const pickIn = await global.Providers.resolve(inception);
+  assert(pickIn.type === 'hls', 'resolve returns an HLS source (got ' + pickIn.type + '), not the iframe');
 
   console.log('Providers.sources(local) — own copy first, resume read:');
   const res2 = await global.Providers.sources(local);
@@ -73,19 +101,6 @@ const unknown = { tmdbId: 1, type: 'movie', title: 'Nope Film', year: '1999' };
   console.log('Providers.resolve(has) === server source:');
   const pick = await global.Providers.resolve(has);
   assert(pick.url === section(res, 'Your servers').entries[0].source.url, 'resolve prefers the user server');
-
-  console.log('Providers.resolve(unknown) === online (if any) else placeholder:');
-  const pick2 = await global.Providers.resolve(unknown);
-  const onlinePick = section(res3, 'Online').entries.length ? section(res3, 'Online').entries[0] : null;
-  if (onlinePick) assert(pick2.url === onlinePick.mirrors[0].url && pick2.fallback.length === onlinePick.mirrors.length - 1, 'resolve picks first online mirror with fallback list');
-  else assert(pick2.url === section(res3, 'Fallback').entries[0].source.url, 'resolve falls back to placeholder when no online source');
-
-  console.log('frameXTV onlineSource shape:');
-  if (onlinePick) {
-    const os = global.Providers.onlineSource(unknown, onlinePick);
-    assert(/^https?:\/\//.test(os.url) && os.type === 'hls', 'onlineSource has an http url + hls type');
-    assert(Array.isArray(os.fallback), 'onlineSource has a fallback mirror array');
-  }
 
   console.log(failures === 0 ? '\nALL PASSED' : '\n' + failures + ' FAILED');
   process.exit(failures === 0 ? 0 : 1);

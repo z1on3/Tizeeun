@@ -10,9 +10,14 @@
 // the player pulls the frameXTV subtitle list and attaches each as a real
 // <track> (the native renderer draws them, which works better than MSE text
 // tracks). DOWN cycles subtitle tracks, UP cycles audio tracks.
+//
+// Iframe mode: VidSrc / 2Embed return an embed URL rather than a direct stream.
+// The player renders that URL in a full-size <iframe> and only handles Back
+// (close); everything else is delegated to the iframe's own player UI.
 var Player = (function () {
   var root = document.getElementById('player');
   var video = document.getElementById('video');
+  var iframe = document.getElementById('player-iframe');
   var osd = document.getElementById('player-osd');
   var titleEl = document.getElementById('player-title');
   var noteEl = document.getElementById('player-note');
@@ -20,10 +25,13 @@ var Player = (function () {
   var timeEl = document.getElementById('player-time');
   var subEl = document.getElementById('player-sub');
   var audioEl = document.getElementById('player-audio');
+  var closeBtn = document.getElementById('player-close');
+  if (closeBtn) closeBtn.addEventListener('click', close);
 
   var hideTimer = null;
   var onClose = null;
   var hls = null;
+  var inIframe = false;
   var urls = [];
   var urlIndex = 0;
   var startAt = 0;
@@ -201,10 +209,25 @@ var Player = (function () {
     video.removeAttribute('src');
     video.load();
     clearTracks();
+    iframe.src = '';
+    root.classList.remove('iframe-mode');
+    inIframe = false;
     root.classList.add('hidden');
     Nav.setTrap(null);
     clearTimeout(hideTimer);
     if (onClose) onClose();
+  }
+
+  // In iframe mode only Back/ESC/Stop close; everything else is left to the
+  // embedded third-party player (our OSD is hidden).
+  function iframeKey(e) {
+    switch (e.keyCode) {
+      case Keys.BACK:
+      case Keys.ESCAPE:
+      case Keys.BACKSPACE:
+      case Keys.STOP: close(); return true;
+    }
+    return false;
   }
 
   function clearTracks() {
@@ -260,6 +283,25 @@ var Player = (function () {
       bar.style.width = '0';
       timeEl.textContent = '';
       root.classList.remove('hidden');
+
+      // Iframe mode (VidSrc / 2Embed): render the embed URL full-screen.
+      if (currentType === 'iframe') {
+        inIframe = true;
+        video.removeAttribute('src');
+        video.load();
+        // Keep the OSD but strip its chrome via .iframe-mode so only the Close
+        // button is visible; don't fade it (fading would swallow the first click).
+        root.classList.add('iframe-mode');
+        osd.classList.remove('faded');
+        iframe.src = source.url;
+        iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
+        iframe.setAttribute('allowfullscreen', 'true');
+        Nav.setTrap(iframeKey);
+        return;
+      }
+
+      inIframe = false;
+      root.classList.remove('iframe-mode');
       Nav.setTrap(handleKey);
       playUrl(0);
 

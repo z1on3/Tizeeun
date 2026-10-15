@@ -3,11 +3,13 @@
 var Providers = (function () {
   var registry = {
     jellyfin: JellyfinProvider,
-    framextv: FrameXtvProvider // built-in online aggregator; not a user server
+    framextv: FrameXtvProvider, // built-in online aggregator (direct HLS)
+    vidsrc: VidSrcProvider,      // built-in online iframe fallback
+    '2embed': Embed2Provider     // built-in online iframe fallback
   };
 
   // Built-in providers: always available, never shown on the "Add server" form.
-  var builtIn = { framextv: true };
+  var builtIn = { framextv: true, vidsrc: true, '2embed': true };
 
   function isBuiltIn(type) { return !!builtIn[type]; }
 
@@ -22,22 +24,34 @@ var Providers = (function () {
     return Store.get().servers.filter(function (s) { return registry[s.type] && !isBuiltIn(s.type); });
   }
 
-  // Build the primary playable source for an online (frameXTV) entry: its first
-  // mirror, with the remaining mirrors queued as fallback for the player.
+  // Build a playable source for an online entry. Handles both shapes:
+  //   - frameXTV: entry.mirrors[] of HLS sources → first is primary, the rest
+  //     are queued as player fallback mirrors.
+  //   - VidSrc / 2Embed: entry.mirrors[] with a single iframe source → played
+  //     in a third-party iframe (no subs/audio control), so no fallback list.
   function onlineSource(item, entry) {
     var first = entry.mirrors[0];
-    var extra = entry.mirrors.length - 1;
-    return {
+    var base = {
       url: first.url,
       title: item.title,
-      note: 'frameXTV  ·  ' + entry.providerName + '  (' + (first.quality || 'HLS') + (extra > 0 ? ', +' + extra + ' fallback' : '') + ')',
       startSeconds: 0,
-      type: first.type || 'hls',
-      quality: first.quality || '',
       tmdbId: item.tmdbId,
       item: item,
-      fallback: entry.mirrors.slice(1).map(function (m) { return m.url; })
+      providerName: entry.providerName,
+      noSandbox: !!first.noSandbox
     };
+    if (first.type === 'iframe') {
+      base.type = 'iframe';
+      base.quality = first.quality || '';
+      base.note = entry.providerName + '  (iframe)';
+      return base;
+    }
+    var extra = entry.mirrors.length - 1;
+    base.type = first.type || 'hls';
+    base.quality = first.quality || '';
+    base.note = 'frameXTV  ·  ' + entry.providerName + '  (' + (first.quality || 'HLS') + (extra > 0 ? ', +' + extra + ' fallback' : '') + ')';
+    base.fallback = entry.mirrors.slice(1).map(function (m) { return m.url; });
+    return base;
   }
 
   // Aggregate every playable source for a title into three sections:
@@ -68,27 +82,39 @@ var Providers = (function () {
       });
     });
 
-    // --- Online (one entry per available frameXTV extraction provider) ---
-    var onlineEntries = FrameXtvProvider.listProviders().then(function (provs) {
-      return Promise.all(provs.map(function (p) {
-        var server = { id: p.id, name: p.name };
-        return FrameXtvProvider.findSource(server, item).then(function (mirrors) {
-          return mirrors.length
-            ? { kind: 'online', providerId: p.id, providerName: p.name, tagline: p.tagline, mirrors: mirrors }
-            : null;
-        });
-      })).then(function (list) {
-        var found = list.filter(Boolean);
-        if (found.length) return found;
-        // Safety net: the per-provider endpoints are flaky, so if they all came
-        // back empty, the auto endpoint (frameXTV picks a server) usually still
-        // finds the title.
-        return FrameXtvProvider.autoSource(item).then(function (mirrors) {
-          if (!mirrors.length) return [];
-          return [{ kind: 'online', providerId: 'auto', providerName: 'frameXTV', tagline: 'auto-picked server', mirrors: mirrors }];
+    // --- Online: frameXTV (direct HLS, one entry per extraction provider) plus
+    //     the iframe fallbacks (VidSrc, 2Embed) — each at most one entry. ---
+    var onlineEntries = (function () {
+      var frameXtv = FrameXtvProvider.listProviders().then(function (provs) {
+        return Promise.all(provs.map(function (p) {
+          var server = { id: p.id, name: p.name };
+          return FrameXtvProvider.findSource(server, item).then(function (mirrors) {
+            return mirrors.length
+              ? { kind: 'online', providerId: p.id, providerName: p.name, tagline: p.tagline, mirrors: mirrors }
+              : null;
+          });
+        })).then(function (list) {
+          var found = list.filter(Boolean);
+          if (found.length) return found;
+          // Safety net: the per-provider endpoints are flaky, so if they all came
+          // back empty, the auto endpoint (frameXTV picks a server) usually still
+          // finds the title.
+          return FrameXtvProvider.autoSource(item).then(function (mirrors) {
+            if (!mirrors.length) return [];
+            return [{ kind: 'online', providerId: 'auto', providerName: 'frameXTV', tagline: 'auto-picked server', mirrors: mirrors }];
+          });
         });
       });
-    });
+      var vidSrc = registry.vidsrc.findSource({ id: 'vidsrc', name: 'VidSrc' }, item).then(function (mirrors) {
+        return mirrors.length ? [{ kind: 'online', providerId: 'vidsrc', providerName: 'VidSrc', mirrors: mirrors }] : [];
+      }).catch(function () { return []; });
+      var embed2 = registry['2embed'].findSource({ id: '2embed', name: '2Embed' }, item).then(function (mirrors) {
+        return mirrors.length ? [{ kind: 'online', providerId: '2embed', providerName: '2Embed', mirrors: mirrors }] : [];
+      }).catch(function () { return []; });
+      return Promise.all([frameXtv, vidSrc, embed2]).then(function (arr) {
+        return [].concat.apply([], arr);
+      });
+    })();
 
     // --- Fallback (placeholder, always) ---
     var fallbackEntry = PlaceholderProvider.findSource(item).then(function (source) {
@@ -112,13 +138,18 @@ var Providers = (function () {
   }
 
   // Pick the single best source for a one-tap "Play": first your-server copy,
-  // else the first online mirror, else the placeholder.
+  // else the first online entry that is direct HLS (frameXTV), else the first
+  // online iframe, else the placeholder. Direct HLS is preferred for the primary
+  // button because it keeps our player controls (subtitles, audio, seek).
   function resolve(item) {
     return sources(item).then(function (res) {
       var serverEntry = res.sections[0].entries[0];
       if (serverEntry) return serverEntry.source;
-      var onlineEntry = res.sections[1].entries[0];
-      if (onlineEntry) return onlineSource(item, onlineEntry);
+      var online = res.sections[1].entries;
+      for (var i = 0; i < online.length; i++) {
+        if (online[i].mirrors[0].type !== 'iframe') return onlineSource(item, online[i]);
+      }
+      if (online.length) return onlineSource(item, online[0]);
       return res.sections[2].entries[0].source;
     });
   }

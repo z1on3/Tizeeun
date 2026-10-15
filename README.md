@@ -1,10 +1,10 @@
 # Tizeeun
 
-Movie and series browser for Samsung TVs, packaged as a [TizenBrew](https://github.com/reisxd/TizenBrew) app module. It acts as a **streaming aggregator**: for any title you search or open, it lists every source you can play it from — your own media servers, plus [frameXTV](https://framextv.xyz) online streams — and lets you pick one.
+Movie and series browser for Samsung TVs, packaged as a [TizenBrew](https://github.com/reisxd/TizenBrew) app module. It acts as a **streaming aggregator**: for any title you search or open, it lists every source you can play it from — your own media servers, plus online streams from [frameXTV](https://framextv.xyz) (direct HLS), [VidSrc](https://vidsrc.sh) and [2Embed](https://2embed.cc) (iframe players) — and lets you pick one.
 
 - **Catalog:** [TMDB](https://www.themoviedb.org/) (trending, popular, top rated, search, details)
-- **Playback:** your own media servers (Jellyfin works now; Plex and Emby planned) **plus** frameXTV — a built-in, no-login online aggregator that supplies HLS mirrors for any TMDB title.
-- **Aggregation:** the Details page groups sources as **Your servers / Online (frameXTV) / Fallback**. HLS is played with bundled [hls.js](https://github.com/video-dev/hls.js) and auto-fails-over across mirrors.
+- **Playback:** your own media servers (Jellyfin works now; Plex and Emby planned) **plus** a built-in online aggregator — no login needed — combining frameXTV (direct HLS mirrors) with VidSrc and 2Embed (iframe fallbacks).
+- **Aggregation:** the Details page groups sources as **Your servers / Online (frameXTV HLS + VidSrc + 2Embed) / Fallback**. HLS is played with bundled [hls.js](https://github.com/video-dev/hls.js), auto-fails over across mirrors, and supports subtitle/audio switching. The one-tap Play button prefers direct-HLS so it keeps our player controls.
 - **Input:** made for the TV remote (arrow-key spatial navigation, Back key, media keys)
 
 Taking over the project? Start with [doc/HANDOVER.md](doc/HANDOVER.md).
@@ -18,11 +18,11 @@ app/css/app.css           1920x1080 TV layout ("projector light" theme)
 app/fonts/                Bricolage Grotesque, Manrope, JetBrains Mono (OFL), bundled
 app/js/config.js          TMDB key + API base (generated from .env by dev/build-config.js)
 app/js/storage.js         media servers in localStorage
-app/js/tmdb.js            TMDB client (v3 key or v4 token)
-app/js/providers/         media-server providers + frameXTV online aggregator + registry
+app/js/tmdb.js            TMDB client (v3 key or v4 token; details include IMDB id)
+app/js/providers/         jellyfin (server) + framextv/vidsrc/2embed (online) + registry
 app/js/vendor/hls.min.js  bundled hls.js (plays frameXTV .m3u8 streams)
 app/js/nav.js             remote-control spatial navigation
-app/js/player.js          fullscreen HTML5 player (native MP4 + HLS via hls.js, mirror failover)
+app/js/player.js          player: MP4 + HLS (hls.js, mirror failover, subs/audio) + iframe mode (VidSrc/2Embed)
 app/js/views.js           Home / Browse / Details (source aggregator) / Search / Settings
 app/js/main.js            router, Back handling, play flow
 dev/build-config.js       .env -> app/js/config.js (TMDB key)
@@ -86,16 +86,18 @@ Then register it in `providers/index.js` and add a `<script>` tag in `index.html
 `Providers.sources(item)` (in `providers/index.js`) builds the list shown on the Details page, in three groups:
 
 1. **Your servers** — one entry per connected server that has the title (the server's own copy via `sourceForLocal` when the item came from that library, otherwise the matched copy via `findSource`). Servers without the title are skipped.
-2. **Online (frameXTV)** — frameXTV's extraction catalog is queried for the TMDB id; each extraction provider (Super Barbarian, Bowler, Miner, …) that has the title becomes one row, carrying its list of HLS mirrors. This needs no login — `api.framextv.tech` is public and CORS-open.
+2. **Online** — three no-login sources queried in parallel:
+   - **frameXTV** (primary): each extraction provider (Super Barbarian, Bowler, Miner, …) that has the title becomes one row carrying its list of HLS mirrors. Direct `.m3u8`, plays with hls.js, subtitles + audio available. An `autoSource()` safety net runs if every per-provider call times out.
+   - **VidSrc** + **2Embed** (fallback): each builds one iframe embed URL from the item's IMDB id. These appear after `TMDB.details()` loads. Played in a full-screen `<iframe>` — no subtitle/audio control, but covers titles frameXTV misses.
 3. **Fallback** — the placeholder demo clip, always present so there's always something to play.
 
-The Details page renders each group under a section label; pressing a row plays that source via `App.playSource`. A frameXTV row starts its best mirror and, if it fails, the player retries the sibling mirrors automatically. The primary **Play** button calls `Providers.resolve(item)`, which picks the first your-server copy, else the first online mirror (with its mirrors queued as fallback), else the placeholder — so a one-tap "just play it" path still works alongside the picker.
+The Details page renders each group under a section label; pressing a row plays that source via `App.playSource`. A frameXTV row starts its best mirror and, if it fails, the player retries the sibling mirrors automatically. A VidSrc/2Embed row switches the player to iframe mode (OSD stripped to a Close button). The primary **Play** button calls `Providers.resolve(item)`, which prefers direct-HLS sources (so you keep subtitle/audio controls), then falls back to the first iframe, then the placeholder — so a one-tap "just play it" path still works alongside the picker.
 
 ## Known limitations / next steps
 
-- **frameXTV is a third-party dependency.** `api.framextv.tech` is closed-source and its per-provider endpoints are intermittent, so it may change or go down. Each per-provider request is time-boxed (12 s), and if they all come back empty an auto call (frameXTV picks a server) is used as a safety net — a title then only drops out of the "Online" group if even that fails. Remove `framextv` from the `Providers` registry in `providers/index.js` to switch it off entirely.
+- **Online sources are third-party dependencies.** frameXTV (`api.framextv.tech`, closed-source; per-provider endpoints are intermittent — mitigated by a 12 s timeout + an `autoSource()` safety net), VidSrc (`vidsrc.sh`) and 2Embed (`2embed.cc`) are all external. If one goes down, only titles that it exclusively had drop out of the "Online" group (the other two still cover most). Remove any one from the `Providers` registry in `providers/index.js` to switch it off entirely.
 - **HTTP servers vs. HTTPS origin:** if TizenBrew serves the module over HTTPS, a LAN Jellyfin at `http://…` may be blocked as mixed content. If that happens on the TV, add a `serviceFile` proxy or use HTTPS on the server.
 - **Codecs:** frameXTV streams are HLS and play via hls.js. Your own Jellyfin copies still use `<video>` with the direct file, so files the TV can't decode will fail. Next step: Samsung `webapis.avplay` and/or Jellyfin HLS transcoding (`master.m3u8`).
 - Watch progress isn't reported back to Jellyfin yet (resume position is read, not written).
 - Episode picker for series is in (Details page: season chips + episode list; picking re-fetches that episode's sources). "Play" still defaults to S1E1 when no episode is chosen.
-- Subtitles (DOWN) and audio tracks (UP) are switched in the player from frameXTV's data; availability is best-effort — some titles have many, others none, and they load a moment after playback starts.
+- Subtitles (DOWN) and audio tracks (UP) are switched in the player from frameXTV's data; availability is best-effort — some titles have many, others none, and they load a moment after playback starts. This only applies to direct-HLS sources; VidSrc/2Embed iframe rows use the provider's own in-iframe player (no subtitle/audio control from Tizeeun).

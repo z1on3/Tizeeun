@@ -92,10 +92,11 @@ var TMDB = (function () {
       return list('/search/multi', null, { query: q, include_adult: 'false' });
     },
     details: function (type, id) {
-      return get('/' + type + '/' + id, { append_to_response: 'videos' }).then(function (json) {
+      return get('/' + type + '/' + id, { append_to_response: 'videos,external_ids' }).then(function (json) {
         var item = normalize(json, type);
         item.genres = (json.genres || []).map(function (g) { return g.name; });
         item.runtime = json.runtime || (json.episode_run_time && json.episode_run_time[0]) || 0;
+        item.imdbId = (json.external_ids && json.external_ids.imdb_id) || '';
         var vids = (json.videos && json.videos.results) || [];
         var trailer = vids.filter(function (v) { return v.site === 'YouTube' && v.type === 'Trailer'; })[0];
         item.trailerKey = trailer ? trailer.key : '';

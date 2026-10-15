@@ -191,9 +191,13 @@ var Views = (function () {
   function sourceRow(item, entry) {
     var name, sub, tag, cls = 'source-row focusable', src;
     if (entry.kind === 'online') {
+      var isIframe = entry.mirrors[0].type === 'iframe';
       name = entry.providerName;
-      sub = (entry.mirrors[0].quality || 'HLS') + '  ·  ' + entry.mirrors.length + ' mirror' + (entry.mirrors.length > 1 ? 's' : '');
-      tag = 'frameXTV';
+      sub = isIframe
+        ? 'Third-party player'
+        : (entry.mirrors[0].quality || 'HLS') + '  ·  ' + entry.mirrors.length + ' mirror' + (entry.mirrors.length > 1 ? 's' : '');
+      tag = isIframe ? 'iframe' : 'HLS';
+      cls += isIframe ? ' iframe' : '';
       src = Providers.onlineSource(item, entry);
     } else if (entry.kind === 'fallback') {
       name = 'Demo video';
@@ -353,6 +357,7 @@ var Views = (function () {
         if (isSeries) { data.season = item.season || 1; data.episode = item.episode || 1; }
         if (!document.body.contains(body)) return;
         renderInfo();
+        renderSources(data); // imdbId is now available → VidSrc/2Embed rows appear
         Ambient.show(full.backdrop || item.backdrop);
         // Series: load the season list and the first season's episodes.
         if (isSeries) {
