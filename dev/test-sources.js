@@ -66,26 +66,26 @@ const inception = { tmdbId: 27205, type: 'movie', title: 'Inception', year: '201
   assert(online && online.entries.every(function (e) { return e.providerName !== 'VidSrc' && e.providerName !== '2Embed'; }), 'no iframe rows without imdbId');
   assert(fallback && fallback.entries.length === 1 && fallback.entries[0].kind === 'fallback', 'one fallback entry');
 
-  console.log('Providers.sources(inception) — frameXTV HLS + VidSrc + 2Embed iframe:');
+  console.log('Providers.sources(inception) — frameXTV direct (HLS/MP4) + VidSrc + 2Embed iframe:');
   const resIn = await global.Providers.sources(inception);
   const onlineIn = section(resIn, 'Online').entries;
   const vidsrcIn = onlineIn.filter(function (e) { return e.providerName === 'VidSrc'; });
   const embed2In = onlineIn.filter(function (e) { return e.providerName === '2Embed'; });
-  const hlsIn = onlineIn.filter(function (e) { return e.mirrors[0].type !== 'iframe'; });
+  const directIn = onlineIn.filter(function (e) { return e.mirrors[0].type !== 'iframe'; });
   assert(vidsrcIn.length === 1 && vidsrcIn[0].mirrors[0].type === 'iframe' && /tt1375666/.test(vidsrcIn[0].mirrors[0].url), 'VidSrc iframe row present with IMDB url (got ' + (vidsrcIn[0] && vidsrcIn[0].mirrors[0].url) + ')');
   assert(embed2In.length === 1 && embed2In[0].mirrors[0].type === 'iframe' && /tt1375666/.test(embed2In[0].mirrors[0].url), '2Embed iframe row present with IMDB url (got ' + (embed2In[0] && embed2In[0].mirrors[0].url) + ')');
-  assert(hlsIn.length >= 1, 'frameXTV HLS row present (got ' + hlsIn.length + ')');
+  assert(directIn.length >= 1, 'a direct frameXTV source present (got ' + directIn.length + ': ' + directIn.map(function (e) { return e.mirrors[0].type; }).join(',') + ')');
 
-  console.log('Providers.onlineSource(inception) — HLS vs iframe shaping:');
-  const hlsEntry = hlsIn[0];
-  const hlsSrc = global.Providers.onlineSource(inception, hlsEntry);
-  assert(hlsSrc.type === 'hls' && Array.isArray(hlsSrc.fallback) && hlsSrc.fallback.length === hlsEntry.mirrors.length - 1, 'HLS source has hls type + fallback mirrors');
+  console.log('Providers.onlineSource(inception) — direct vs iframe shaping:');
+  const directEntry = directIn[0];
+  const directSrc = global.Providers.onlineSource(inception, directEntry);
+  assert(directSrc.type === (directEntry.mirrors[0].type || 'hls') && Array.isArray(directSrc.fallback) && directSrc.fallback.length === directEntry.mirrors.length - 1, 'direct source keeps its type (' + directSrc.type + ') + fallback mirrors');
   const iframeSrc = global.Providers.onlineSource(inception, vidsrcIn[0]);
   assert(iframeSrc.type === 'iframe' && !iframeSrc.fallback, 'iframe source has iframe type, no fallback list');
 
-  console.log('Providers.resolve(inception) — prefers HLS over iframe:');
+  console.log('Providers.resolve(inception) — prefers a direct source over iframe:');
   const pickIn = await global.Providers.resolve(inception);
-  assert(pickIn.type === 'hls', 'resolve returns an HLS source (got ' + pickIn.type + '), not the iframe');
+  assert(pickIn.type !== 'iframe', 'resolve returns a direct source (got ' + pickIn.type + '), not the iframe');
 
   console.log('Providers.sources(local) — own copy first, resume read:');
   const res2 = await global.Providers.sources(local);

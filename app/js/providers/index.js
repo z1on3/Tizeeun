@@ -56,84 +56,107 @@ var Providers = (function () {
 
   // Aggregate every playable source for a title into three sections:
   //   - Your servers: one entry per connected server that has the title.
-  //   - Online: one entry per frameXTV extraction provider that has the title,
-  //     each carrying its list of HLS mirrors.
+  //   - Online: one entry per frameXTV extraction provider that has the title
+  //     (HLS mirrors), plus VidSrc and 2Embed (iframe) as the item's IMDB id
+  //     becomes known.
   //   - Fallback: the placeholder demo clip (always present).
-  // Resolves to { sections: [ { title, entries: [...] } ] }.
-  function sources(item) {
+  //
+  // Progressive: each query emits into the live sections as it settles, and
+  // calls onUpdate(sections, state) so the UI can render the row immediately
+  // instead of waiting for the slowest frameXTV mirror. The returned promise
+  // still resolves with the full { sections } once everything has settled
+  // (used by resolve() and the tests).
+  function sources(item, onUpdate) {
+    var sections = [
+      { title: 'Your servers', entries: [] },
+      { title: 'Online', entries: [] },
+      { title: 'Fallback', entries: [] }
+    ];
+    var state = { done: false };
+
+    function emit() { if (onUpdate) onUpdate(sections, state); }
+
     var order = userServers();
     if (item.local) {
       var ownId = item.local.serverId;
       order.sort(function (a, b) { return (b.id === ownId ? 1 : 0) - (a.id === ownId ? 1 : 0); });
     }
+    var settle = []; // terminal promises for "everything settled"
 
-    // --- Your servers (one entry per server that has it) ---
-    var serverEntries = order.map(function (server) {
+    function addSettle(p) { settle.push(p); return p; }
+
+    // --- Your servers: stream each entry as it resolves ---
+    order.forEach(function (server) {
       var provider = registry[server.type];
       var isLocal = !!(item.local && item.local.serverId === server.id);
       var req = isLocal ? provider.sourceForLocal(server, item) : provider.findSource(server, item);
-      return req.catch(function (err) {
+      addSettle(req.catch(function (err) {
         console.warn('[providers] ' + server.name + ': ' + err.message);
         return null;
       }).then(function (source) {
-        return source
-          ? { kind: 'server', serverName: server.name, isLocal: isLocal, source: source }
-          : null;
-      });
+        if (source) {
+          sections[0].entries.push({ kind: 'server', serverName: server.name, isLocal: isLocal, source: source });
+          emit();
+        }
+      }));
     });
 
-    // --- Online: frameXTV (direct HLS, one entry per extraction provider) plus
-    //     the iframe fallbacks (VidSrc, 2Embed) — each at most one entry. ---
-    var onlineEntries = (function () {
-      var frameXtv = FrameXtvProvider.listProviders().then(function (provs) {
-        return Promise.all(provs.map(function (p) {
-          var server = { id: p.id, name: p.name };
-          return FrameXtvProvider.findSource(server, item).then(function (mirrors) {
-            return mirrors.length
-              ? { kind: 'online', providerId: p.id, providerName: p.name, tagline: p.tagline, mirrors: mirrors }
-              : null;
-          });
-        })).then(function (list) {
-          var found = list.filter(Boolean);
-          if (found.length) return found;
-          // Safety net: the per-provider endpoints are flaky, so if they all came
-          // back empty, the auto endpoint (frameXTV picks a server) usually still
-          // finds the title.
-          return FrameXtvProvider.autoSource(item).then(function (mirrors) {
-            if (!mirrors.length) return [];
-            return [{ kind: 'online', providerId: 'auto', providerName: 'frameXTV', tagline: 'auto-picked server', mirrors: mirrors }];
-          });
+    // --- Fallback placeholder: usually instant ---
+    addSettle(PlaceholderProvider.findSource(item).catch(function () { return null; }).then(function (source) {
+      if (source) {
+        sections[2].entries.push({ kind: 'fallback', serverName: 'Demo video', source: source });
+        emit();
+      }
+    }));
+
+    // --- Online iframe fallbacks (VidSrc, 2Embed): each at most one entry ---
+    [['vidsrc', 'VidSrc'], ['2embed', '2Embed']].forEach(function (pair) {
+      var provider = registry[pair[0]], label = pair[1];
+      addSettle(provider.findSource({ id: pair[0], name: label }, item).catch(function () { return []; }).then(function (mirrors) {
+        if (mirrors.length) {
+          sections[1].entries.push({ kind: 'online', providerId: pair[0], providerName: label, mirrors: mirrors });
+          emit();
+        }
+      }));
+    });
+
+    // --- Online frameXTV: stream each extraction provider as it responds. The
+    //     auto endpoint runs in parallel as a safety net (a slow/timed-out
+    //     per-provider call shouldn't blank the whole group), and is kept only
+    //     if it picked a provider the per-provider calls didn't already find. ---
+    addSettle(FrameXtvProvider.listProviders().catch(function () { return []; }).then(function (provs) {
+      var foundProviders = {};
+      var autoEntry = null;
+      function pushOnline(entry) {
+        sections[1].entries.push(entry);
+        emit();
+      }
+      var perProvider = provs.map(function (p) {
+        var server = { id: p.id, name: p.name };
+        return FrameXtvProvider.findSource(server, item).catch(function () { return []; }).then(function (mirrors) {
+          if (mirrors.length) {
+            foundProviders[p.id] = true;
+            pushOnline({ kind: 'online', providerId: p.id, providerName: p.name, tagline: p.tagline, mirrors: mirrors });
+          }
         });
       });
-      var vidSrc = registry.vidsrc.findSource({ id: 'vidsrc', name: 'VidSrc' }, item).then(function (mirrors) {
-        return mirrors.length ? [{ kind: 'online', providerId: 'vidsrc', providerName: 'VidSrc', mirrors: mirrors }] : [];
-      }).catch(function () { return []; });
-      var embed2 = registry['2embed'].findSource({ id: '2embed', name: '2Embed' }, item).then(function (mirrors) {
-        return mirrors.length ? [{ kind: 'online', providerId: '2embed', providerName: '2Embed', mirrors: mirrors }] : [];
-      }).catch(function () { return []; });
-      return Promise.all([frameXtv, vidSrc, embed2]).then(function (arr) {
-        return [].concat.apply([], arr);
+      var auto = FrameXtvProvider.autoSource(item).catch(function () { return []; }).then(function (mirrors) {
+        if (mirrors.length) {
+          autoEntry = { kind: 'online', providerId: 'auto', providerName: mirrors[0].providerName || 'frameXTV', tagline: 'auto-picked server', mirrors: mirrors };
+        }
       });
-    })();
+      return Promise.all([Promise.all(perProvider), auto]).then(function () {
+        if (autoEntry && !foundProviders[autoEntry.providerName] &&
+            !sections[1].entries.some(function (e) { return e.providerName === autoEntry.providerName; })) {
+          pushOnline(autoEntry);
+        }
+      });
+    }));
 
-    // --- Fallback (placeholder, always) ---
-    var fallbackEntry = PlaceholderProvider.findSource(item).then(function (source) {
-      return { kind: 'fallback', serverName: 'Demo video', source: source };
-    });
-
-    return Promise.all([
-      Promise.all(serverEntries).then(function (l) { return l.filter(Boolean); }),
-      onlineEntries.then(function (l) { return l.filter(Boolean); }),
-      fallbackEntry
-    ]).then(function (arr) {
-      var serverEntries = arr[0], onlineEntries = arr[1], fallbackEntry = arr[2];
-      return {
-        sections: [
-          { title: 'Your servers', entries: serverEntries },
-          { title: 'Online', entries: onlineEntries },
-          { title: 'Fallback', entries: [fallbackEntry] }
-        ]
-      };
+    return Promise.all(settle).then(function () {
+      state.done = true;
+      emit();
+      return { sections: sections };
     });
   }
 

@@ -91,7 +91,7 @@ Then register it in `providers/index.js` and add a `<script>` tag in `index.html
    - **VidSrc** + **2Embed** (fallback): each builds one iframe embed URL from the item's IMDB id. These appear after `TMDB.details()` loads. Played in a full-screen `<iframe>` — no subtitle/audio control, but covers titles frameXTV misses.
 3. **Fallback** — the placeholder demo clip, always present so there's always something to play.
 
-The Details page renders each group under a section label; pressing a row plays that source via `App.playSource`. A frameXTV row starts its best mirror and, if it fails, the player retries the sibling mirrors automatically. A VidSrc/2Embed row switches the player to iframe mode (OSD stripped to a Close button). The primary **Play** button calls `Providers.resolve(item)`, which prefers direct-HLS sources (so you keep subtitle/audio controls), then falls back to the first iframe, then the placeholder — so a one-tap "just play it" path still works alongside the picker.
+The Details page renders each group under a section label; pressing a row plays that source via `App.playSource`. Sources are fetched **progressively** — each row appears the moment its provider responds, so you don't wait on the slowest frameXTV mirror. A frameXTV row starts its best mirror and, if it fails, the player retries the sibling mirrors automatically. A VidSrc/2Embed row switches the player to iframe mode (OSD stripped to a Close button). The primary **Play** button calls `Providers.resolve(item)`, which prefers a direct source (HLS or MP4) over an iframe — so you keep subtitle/audio/seek controls — then falls back to the first iframe, then the placeholder.
 
 ## Known limitations / next steps
 

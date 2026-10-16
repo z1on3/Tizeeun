@@ -86,32 +86,38 @@ The scripts load in order from `app/index.html` as plain globals (no modules, no
 | `app/js/providers/framextv.js` | frameXTV: built-in online aggregator. `listProviders()` + `findSource()` (per-provider mirrors, timed) + `autoSource()` (safety net) + `subtitles()`. Public `api.framextv.tech`, no auth |
 | `app/js/providers/vidsrc.js` | VidSrc: built-in iframe fallback. Builds `vidsrc.sh/embed/{movie|tv}/…` from the item's IMDB id (from `TMDB.details`). No login, no CORS needed (renders in an `<iframe>`) |
 | `app/js/providers/2embed.js` | 2Embed: built-in iframe fallback. Builds `2embed.cc/embed{,tv}/…` from the item's IMDB id. Same contract as VidSrc |
-| `app/js/providers/index.js` | `Providers` registry: `sources(item)` aggregates into **Your servers / Online (frameXTV HLS + VidSrc + 2Embed iframe) / Fallback** sections; `resolve(item)` prefers direct HLS; `onlineSource()` shapes a frameXTV or iframe entry for the player |
+| `app/js/providers/index.js` | `Providers` registry: `sources(item, onUpdate?)` aggregates into **Your servers / Online (frameXTV HLS + VidSrc + 2Embed iframe) / Fallback** sections **progressively** — each source streams into `onUpdate` as it settles, so the UI renders the row immediately; the final promise (with all sections) still resolves for `resolve()` / tests. `onlineSource()` shapes a frameXTV or iframe entry for the player |
 | `app/js/nav.js` | `Nav`: spatial focus for the remote, row/page scrolling, key trap for the player |
 | `app/js/player.js` | `Player`: fullscreen `<video>` for MP4/HLS (hls.js), with an `<iframe>` mode for VidSrc/2Embed. Cycles subtitles (DOWN) / audio (UP), auto-fails-over to `source.fallback` mirrors on a fatal HLS error |
 | `app/js/views.js` | Screens: Home (spotlight), Browse (filters), Details (aggregated sources + episode picker for series), Search, Settings; `Ambient` backdrop; `h()` DOM builder |
 | `app/js/main.js` | `App`: router with a history stack, Back handling, `play()` flow and `playSource()` for picking one aggregated source |
 | `dev/mock-jellyfin.js` | Fake Jellyfin with only the endpoints the app uses |
 | `dev/build-config.js` | Copies the TMDB key from `.env` into `app/js/config.js` (run by `npm run config` / `predev`) |
-| `dev/test-sources.js` | Node harness: loads the real provider files and asserts the aggregator groups (servers / frameXTV / fallback) and `resolve` pick against the live frameXTV API + mock Jellyfin |
+| `dev/test-sources.js` | Node harness: loads the real provider files and asserts the aggregator groups (servers / frameXTV / VidSrc / 2Embed / fallback) and `resolve` pick against the live frameXTV API + mock Jellyfin |
+| `dev/test-progressive.js` | Asserts `Providers.sources(item, onUpdate)` streams entries in progressively (multiple emits, sources visible before `state.done`, counts only grow) against the live frameXTV API |
 
 ### Play flow
 
-Everything builds from `Providers.sources(item)`, which resolves to
-`{ sections: [ { title, entries } ] }` — three groups:
+Everything builds from `Providers.sources(item, onUpdate)`, which resolves to
+`{ sections: [ { title, entries } ] }` — three groups. It is **progressive**:
+every query streams its entry into `onUpdate` the instant it settles (so the UI
+shows each source as it appears, not after the slowest one), and the promise
+resolves with the full sections once everything has settled.
 
 ```
 Providers.sources(item)
   ├─ "Your servers" — one entry per connected server that has the title
   │     item.local? → own server's sourceForLocal() first, other servers'
   │     findSource() after (each resolved independently, null = not there)
-  ├─ "Online" — three no-login sources, in parallel:
-  │     • frameXTV: listProviders() → /api/providers, then one /api/stream call
-  │       per extraction provider. Returns direct HLS mirrors (de-duped); an
-  │       autoSource() safety net runs if every per-provider call is empty.
-  │     • VidSrc + 2Embed: each builds one iframe embed URL from the item's
-  │       IMDB id (only present once TMDB.details has loaded). No CORS needed —
-  │       the URL is rendered in an <iframe>.
+   ├─ "Online" — three no-login sources, all in parallel:
+   │     • frameXTV: listProviders() → /api/providers, then one /api/stream call
+   │       per extraction provider (each streamed in as it responds). Returns
+   │       direct mirrors (HLS `.m3u8` or MP4); a parallel autoSource() safety
+   │       net (frameXTV picks a server) is kept only if it chose a provider the
+   │       per-provider calls didn't already find.
+   │     • VidSrc + 2Embed: each builds one iframe embed URL from the item's
+   │       IMDB id (only present once TMDB.details has loaded). No CORS needed —
+   │       the URL is rendered in an <iframe>.
   └─ "Fallback" — the placeholder demo clip, always present.
 ```
 
@@ -125,13 +131,14 @@ From there:
   switches to iframe mode (full-screen `<iframe>`, OSD stripped to a Close button,
   Back/ESC/Stop close it).
 - **"Play" button** calls `Providers.resolve(item)` — first your-server copy, else
-  the first **direct-HLS** online source (so the primary path keeps our subtitle/
-  audio controls), else the first iframe, else the placeholder.
+  the first **direct** online source (HLS or MP4, not iframe — so the primary path
+  keeps our subtitle/audio/seek controls), else the first iframe, else the placeholder.
 
-A source is `{ url, title, note, startSeconds }`, optionally `type` (`"hls"` or
-`"iframe"`), `quality`, and `fallback: [url, …]`. Jellyfin URLs are
+A source is `{ url, title, note, startSeconds }`, optionally `type` (`"hls"`,
+`"mp4"` or `"iframe"`), `quality`, and `fallback: [url, …]`. Jellyfin URLs are
 `/Videos/{id}/stream?static=true` (direct stream). frameXTV URLs are `.m3u8` HLS
-played by hls.js. VidSrc/2Embed URLs are third-party embed pages played in an
+played by hls.js (or, for some extraction servers, a direct MP4 the browser plays
+natively). VidSrc/2Embed URLs are third-party embed pages played in an
 `<iframe>`. The token goes in both `ApiKey` (Jellyfin 10.10+) and the older
 `api_key` parameter.
 

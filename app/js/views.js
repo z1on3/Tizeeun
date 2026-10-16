@@ -223,25 +223,58 @@ var Views = (function () {
     return row;
   }
 
+  // Renders the sources list. Sources arrive progressively (see
+  // Providers.sources' onUpdate) — a row appears the moment its query settles,
+  // so the user sees working sources immediately instead of waiting for the
+  // slowest frameXTV mirror. The three section labels exist up front (in fixed
+  // order) but stay hidden until their first row arrives, so empty sections
+  // never flash.
   function renderSources(full) {
     sourcesPanel.innerHTML = '';
     sourcesPanel.appendChild(h('h2', { class: 'sources-title' }, 'Available sources'));
-    var list = h('div', { class: 'sources scroll-y', 'data-pad-top': '16' },
-      [h('div', { class: 'row-note' }, 'Finding sources…')]);
+    var list = h('div', { class: 'sources scroll-y', 'data-pad-top': '16' });
+    var SECTIONS = ['Your servers', 'Online', 'Fallback'];
+    var label = {}, lastEl = {}, shown = {};
+    SECTIONS.forEach(function (title) {
+      label[title] = h('div', { class: 'source-section-label hidden' }, title);
+      list.appendChild(label[title]);
+      lastEl[title] = label[title];
+      shown[title] = false;
+    });
     sourcesPanel.appendChild(list);
 
-    Providers.sources(full).then(function (res) {
+    var added = {};          // entry key -> true (dedupe across progressive emits)
+
+    function sectionOf(entry) {
+      return entry.kind === 'server' ? 'Your servers' : entry.kind === 'fallback' ? 'Fallback' : 'Online';
+    }
+    function entryKey(entry) {
+      if (entry.kind === 'online') return 'online:' + entry.providerId;
+      if (entry.kind === 'server') return 'server:' + entry.serverName;
+      return 'fallback';
+    }
+
+    function addEntry(entry) {
+      var key = entryKey(entry);
+      if (added[key]) return;
+      added[key] = true;
+      var sec = sectionOf(entry);
+      if (!shown[sec]) {
+        shown[sec] = true;
+        label[sec].classList.remove('hidden');
+      }
+      var row = sourceRow(full, entry);
+      lastEl[sec].after(row); // after the label, or the previous row of this section
+      lastEl[sec] = row;
+    }
+
+    function refresh(sections) {
       if (!document.body.contains(sourcesPanel)) return;
-      list.innerHTML = '';
-      var any = false;
-      res.sections.forEach(function (sec) {
-        if (!sec.entries.length) return;
-        any = true;
-        list.appendChild(h('div', { class: 'source-section-label' }, sec.title));
-        sec.entries.forEach(function (entry) { list.appendChild(sourceRow(full, entry)); });
-      });
-      if (!any) list.appendChild(h('div', { class: 'row-note' }, 'No sources available.'));
-    }).catch(function (err) {
+      sections.forEach(function (sec) { sec.entries.forEach(addEntry); });
+    }
+
+    Providers.sources(full, refresh).catch(function (err) {
+      if (!document.body.contains(sourcesPanel)) return;
       list.innerHTML = '';
       list.appendChild(h('div', { class: 'row-note' }, 'Couldn\'t find sources: ' + err.message));
     });
